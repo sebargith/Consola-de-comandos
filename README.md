@@ -65,6 +65,10 @@ TestShell> favs eliminar num1,num2
 
 Elimina los comandos favoritos asociados a los números especificados.
 
+TestShell> favs desconectar
+
+Limpia la shell de comandos favoritos que puedan estar en memoria
+
 Buscar favoritos:
 
 TestShell> favs buscar nombre_comando
