@@ -34,6 +34,10 @@ void guardar_favoritos();
 
 // Implementación de las funciones
 void agregar_favorito(char *comando) {
+    if (num_favoritos >= MAX_FAVS) {
+        printf("Error: se ha alcanzado el número máximo de comandos favoritos (%d).\n", MAX_FAVS);
+        return;
+    }
     for (int i = 0; i < num_favoritos; i++) {
         if (strcmp(favoritos[i].comando, comando) == 0) {
             return;
@@ -44,12 +48,25 @@ void agregar_favorito(char *comando) {
     num_favoritos++;
 }
 
+
 void mostrar_favoritos() {
     printf("Lista de comandos favoritos:\n");
     for (int i = 0; i < num_favoritos; i++) {
         printf("%d: %s\n", favoritos[i].id, favoritos[i].comando);
     }
 }
+
+void desconectar_favoritos() {
+    if (strlen(archivo_favoritos) == 0) {
+        printf("No hay archivo de favoritos actualmente conectado.\n");
+        return;
+    }
+    
+    archivo_favoritos[0] = '\0';  // Vaciar el nombre del archivo
+    num_favoritos = 0;            // Borrar la lista de favoritos en memoria
+    printf("Se ha desconectado del archivo de favoritos. Lista de favoritos vaciada.\n");
+}
+
 
 void eliminar_favoritos(char *ids) {
     int id;
@@ -83,7 +100,9 @@ void ejecutar_favorito(int id) {
         if (favoritos[i].id == id) {
             char *args[T_MAX_ARG];
             int j = 0;
-            char *temp = strtok(favoritos[i].comando, " ");
+            char temp_comando[T_MAX];
+            strcpy(temp_comando, favoritos[i].comando);  // Copiar el comando
+            char *temp = strtok(temp_comando, " ");
             while (temp != NULL) {
                 args[j] = temp;
                 j++;
@@ -94,6 +113,7 @@ void ejecutar_favorito(int id) {
         }
     }
 }
+
 
 void manejar_favs(char *input) {
     if (strncmp(input, "favs crear ", 11) == 0) {
@@ -116,31 +136,58 @@ void manejar_favs(char *input) {
     } else if (strncmp(input, "favs ", 5) == 0 && strstr(input, " ejecutar") != NULL) {
         int id = atoi(input + 5);
         ejecutar_favorito(id);
-    } else if (strcmp(input, "favs cargar") == 0) {
-        cargar_favoritos();
+    } else if (strncmp(input, "favs cargar ", 12) == 0) {
+        strcpy(archivo_favoritos, input + 12);  // Guardar el nombre del nuevo archivo
+        cargar_favoritos();  // Cargar los favoritos desde el nuevo archivo
     } else if (strcmp(input, "favs guardar") == 0) {
         guardar_favoritos();
+    } else if (strcmp(input, "favs desconectar") == 0) {
+        desconectar_favoritos();
     }
 }
 
+
 void cargar_favoritos() {
+    if (strlen(archivo_favoritos) == 0) {
+        printf("Debe especificar un archivo con el comando favs cargar archivo.txt\n");
+        return;
+    }
+
     FILE *file = fopen(archivo_favoritos, "r");
     if (file == NULL) {
         perror("Error al cargar favoritos");
         return;
     }
-    num_favoritos = 0;
+
+    num_favoritos = 0;  // Reiniciar la lista actual de favoritos
     while (fscanf(file, "%d %[^\n]", &favoritos[num_favoritos].id, favoritos[num_favoritos].comando) != EOF) {
         if (favoritos[num_favoritos].id >= fav_id) {
             fav_id = favoritos[num_favoritos].id + 1;
         }
         num_favoritos++;
+        if (num_favoritos >= MAX_FAVS) {
+            printf("Error: se ha alcanzado el número máximo de comandos favoritos (%d).\n", MAX_FAVS);
+            break;
+        }
     }
+
     printf("Favoritos cargados desde el archivo: %s\n", archivo_favoritos);
     fclose(file);
 }
 
+
+
+
 void guardar_favoritos() {
+    if (strlen(archivo_favoritos) == 0) {
+        printf("Debe especificar un archivo con el comando favs cargar archivo.txt para guardar.\n");
+        return;
+    }
+    if (num_favoritos == 0) {
+        printf("No hay comandos favoritos para guardar.\n");
+        return;
+    }
+
     FILE *file = fopen(archivo_favoritos, "w");
     if (file == NULL) {
         perror("Error al guardar favoritos");
@@ -152,6 +199,8 @@ void guardar_favoritos() {
     printf("Favoritos guardados en el archivo: %s\n", archivo_favoritos);
     fclose(file);
 }
+
+
 
 void ejecutar_comando(char **args) {
     if (execvp(args[0], args) == -1) {
@@ -213,26 +262,28 @@ void manejar_pipes(char *input) {
     }
 }
 
+
 void shell() {
     char input[T_MAX];
     char *args[T_MAX_ARG];
     char *temp;
     int i;
-    pid_t pid; // Para almacenar el ID del proceso hijo
-    int estado; // Para almacenar el estado de terminación del hijo
+    pid_t pid;
+    int estado;
+    char archivo_favoritos[T_MAX] = ""; // Suponiendo que tienes esta variable definida
 
     while (1) {
-        // 1. Mostrar el prompt de la shell
+        // Mostrar el prompt de la shell
         printf("TestShell> ");
         fflush(stdout);
 
-        // 2. Leer el argumento
+        // Leer el comando ingresado por el usuario
         if (fgets(input, T_MAX, stdin) == NULL) {
             perror("Error leyendo la entrada");
             continue;
         }
 
-        // Remover el salto de línea de la entrada
+        // Remover el salto de línea
         input[strcspn(input, "\n")] = '\0';
 
         // Continuar si se presiona "enter" sin escribir un comando
@@ -242,8 +293,23 @@ void shell() {
 
         // Comprobar si el comando es "exit"
         if (strcmp(input, "exit") == 0) {
+            if (strlen(archivo_favoritos) > 0) {
+                printf("Guardando favoritos antes de salir...\n");
+                guardar_favoritos();
+            } else {
+                printf("No hay archivo de favoritos conectado, saliendo sin guardar.\n");
+            }
             printf("Saliendo de la shell...\n");
             break;
+        }
+
+        // Comprobar si el comando es "cd"
+        if (strncmp(input, "cd ", 3) == 0) {
+            char *path = input + 3;
+            if (chdir(path) == -1) {
+                perror("Error cambiando de directorio");
+            }
+            continue;  // Saltar la creación del proceso hijo
         }
 
         // Comprobar si el comando es un recordatorio
@@ -252,18 +318,21 @@ void shell() {
             char mensaje[T_MAX];
 
             // Parsear el comando de recordatorio
-            sscanf(input + 17, "%d \"%[^\"]\"", &tiempo, mensaje);
-
-            pid = fork();
-            if (pid == -1) {
-                perror("Error al crear el proceso hijo");
-            } else if (pid == 0) {
-                // Proceso hijo: esperar el tiempo especificado y mostrar el mensaje
-                sleep(tiempo);
-                printf("\nRecordatorio: %s\n", mensaje);
-                exit(EXIT_SUCCESS);
+            if (sscanf(input + 17, "%d \"%[^\"]\"", &tiempo, mensaje) == 2) {
+                pid = fork();
+                if (pid == -1) {
+                    perror("Error al crear el proceso hijo");
+                } else if (pid == 0) {
+                    // Proceso hijo: esperar el tiempo especificado y mostrar el mensaje
+                    sleep(tiempo);
+                    printf("\nRecordatorio: %s\n", mensaje);
+                    exit(EXIT_SUCCESS);
+                } else {
+                    // Proceso padre: continuar
+                    continue;
+                }
             } else {
-                // Proceso padre: continuar
+                printf("Formato de recordatorio incorrecto. Use: set recordatorio <tiempo> \"<mensaje>\"\n");
                 continue;
             }
         }
@@ -288,7 +357,7 @@ void shell() {
             i++;
             temp = strtok(NULL, " ");
         }
-        args[i] = NULL; // El último argumento debe ser NULL para execvp
+        args[i] = NULL;  // El último argumento debe ser NULL para execvp
 
         // Agregar el comando a los favoritos, si no es un comando de favoritos
         agregar_favorito(input);
@@ -297,7 +366,6 @@ void shell() {
         pid = fork();
 
         if (pid == -1) {
-            // Caso de error
             perror("Error al crear el proceso hijo");
         } else if (pid == 0) {
             // Proceso hijo: ejecutar el comando
